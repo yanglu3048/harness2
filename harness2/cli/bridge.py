@@ -38,6 +38,18 @@ general_settings:
   master_key: os.environ/HARNESS2_BRIDGE_KEY
 """
 
+LITELLM_OPENAI_CONFIG = """model_list:
+  - model_name: {model}
+    litellm_params:
+      model: openai/{model}
+      api_base: {api_base}
+      api_key: {api_key}
+litellm_settings:
+  drop_params: true
+general_settings:
+  master_key: os.environ/HARNESS2_BRIDGE_KEY
+"""
+
 
 def _free_port(host: str) -> int:
     with socket.socket() as s:
@@ -63,7 +75,12 @@ def _endpoint(path: Path, host: str, port: int) -> dict:
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--model", default=config.SOLVER_MODEL_CX, help="Vertex model ID to serve")
+    p.add_argument("--model", default=config.SOLVER_MODEL_CX, help="Vertex or local model ID to serve")
+    p.add_argument(
+        "--api-base",
+        default=config.env("HARNESS2_JUDGE_BASE_URL", ""),
+        help="OpenAI-compatible base URL (e.g. http://192.168.9.33:8080/v1) when not using Vertex",
+    )
     p.add_argument(
         "--host",
         default="127.0.0.1",
@@ -75,14 +92,24 @@ def main(argv=None):
     litellm = Path(sys.executable).with_name("litellm")
     if not litellm.is_file():
         p.exit(1, "LiteLLM is not installed; run: uv pip install -e '.[render,bridge]'\n")
-    if not config.VERTEX_PROJECT:
-        p.exit(1, "Set GOOGLE_CLOUD_PROJECT in .env\n")
+    if not config.VERTEX_PROJECT and not args.api_base:
+        p.exit(1, "Set GOOGLE_CLOUD_PROJECT or HARNESS2_JUDGE_BASE_URL in .env\n")
 
     root = config.DEPENDENCIES / "codex"
     endpoint = _endpoint(root / "bridge.json", args.host, args.port)
     port = endpoint["port"]
     litellm_config = root / "bridge.yaml"
-    litellm_config.write_text(LITELLM_CONFIG.format(model=args.model), encoding="utf-8")
+    if args.api_base:
+        litellm_config.write_text(
+            LITELLM_OPENAI_CONFIG.format(
+                model=args.model,
+                api_base=args.api_base,
+                api_key=config.env("HARNESS2_JUDGE_API_KEY", "local-key"),
+            ),
+            encoding="utf-8",
+        )
+    else:
+        litellm_config.write_text(LITELLM_CONFIG.format(model=args.model), encoding="utf-8")
 
     settings = {
         "HARNESS2_CODEX_BASE_URL": f"http://127.0.0.1:{port}/v1",

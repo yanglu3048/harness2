@@ -964,18 +964,62 @@ class LabAdapter:
         RESULTS_DIR with it, and an absolute right-hand side wins that join."""
         p = Path(run_dir) / "scores.json"
         if not p.is_file():
-            cmd = [
-                str(config.LAB_PYTHON),
-                "-u",
-                "-m",
-                "evaluation.run_eval",
-                "--run-id",
-                str(Path(run_dir).resolve()),
-                "--task",
-                task_id,
-                "--judge-model",
-                self.judge_model,
-            ]
+            custom_base = config.env("HARNESS2_JUDGE_BASE_URL", "")
+            if custom_base:
+                boot = (
+                    "import os, openai, evaluation.judge as J, evaluation.run_eval as R; "
+                    "_orig_init = J.Judge.__init__; "
+                    "def _compat_init(self, model='claude-sonnet-4-6'):\n"
+                    "    self.model = model\n"
+                    "    self.provider = 'openai_compat'\n"
+                    "    self.client = openai.OpenAI(\n"
+                    "        base_url=os.environ['HARNESS2_JUDGE_BASE_URL'],\n"
+                    "        api_key=os.environ.get('HARNESS2_JUDGE_API_KEY') or 'local-key',\n"
+                    "        timeout=900.0,\n"
+                    "    )\n"
+                    "def _compat_eval(self, prompt_template, variables, temperature=0.0, _retries=4):\n"
+                    "    prompt = prompt_template.format(**variables)\n"
+                    "    last_err = None\n"
+                    "    for _ in range(_retries):\n"
+                    "        try:\n"
+                    "            r = self.client.chat.completions.create(\n"
+                    "                model=self.model,\n"
+                    "                messages=[{'role': 'system', 'content': J.Judge._VERTEX_SYSTEM}, {'role': 'user', 'content': prompt}],\n"
+                    "                max_tokens=16384,\n"
+                    "                temperature=temperature,\n"
+                    "            )\n"
+                    "            text = (r.choices[0].message.content or '') if r.choices else ''\n"
+                    "            return self._parse_json(text)\n"
+                    "        except Exception as e:\n"
+                    "            last_err = e\n"
+                    "    raise ValueError(f'Judge failed after {_retries} attempts: {last_err}')\n"
+                    "J.Judge.__init__ = _compat_init; J.Judge.evaluate = _compat_eval; R.main()"
+                )
+                cmd = [
+                    str(config.LAB_PYTHON),
+                    "-u",
+                    "-c",
+                    boot,
+                    "--run-id",
+                    str(Path(run_dir).resolve()),
+                    "--task",
+                    task_id,
+                    "--judge-model",
+                    self.judge_model,
+                ]
+            else:
+                cmd = [
+                    str(config.LAB_PYTHON),
+                    "-u",
+                    "-m",
+                    "evaluation.run_eval",
+                    "--run-id",
+                    str(Path(run_dir).resolve()),
+                    "--task",
+                    task_id,
+                    "--judge-model",
+                    self.judge_model,
+                ]
             log = Path(run_dir) / "judge.log"
             try:
                 with log.open("w", encoding="utf-8") as out:

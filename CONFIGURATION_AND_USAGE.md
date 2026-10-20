@@ -59,12 +59,15 @@ The local workspace (`/home/meldude/harness2`) has been initialized and configur
 |---|---|
 | `.venv/` | Python 3.12 virtual environment with `harness2` installed in editable mode along with `[render,bridge]` extras (`openpyxl`, `python-pptx`, `litellm[proxy]`, `fastapi`, `google-auth`). |
 | `.env.example` | Documented template of all supported Harness² environment variables. |
-| `.env` | Active local configuration file (git-ignored so your credentials/project IDs stay private). |
+| `.env` | Active local configuration file — **currently configured to use your local inference server at `192.168.9.33:8080` (`huihui-qwen3.8-flash-next-iq3_s`)**. |
+| `configs/local-inference.env` | Tracked preset for your local OpenAI-compatible inference server (`http://192.168.9.33:8080/v1`, model `huihui-qwen3.8-flash-next-iq3_s`). |
+| `configs/opencode-local.json` | OpenCode custom provider definition (`@ai-sdk/openai-compatible`) mapping `local/huihui-qwen3.8-flash-next-iq3_s` to `http://192.168.9.33:8080/v1` (also installed at `~/.config/opencode/opencode.json`). |
 | `configs/vertex-gemini.env` | Tracked preset for Vertex AI Gemini solver, improver, and judge (OpenCode substrate). |
 | `configs/vertex-claude-improver.env` | Tracked preset using Vertex Gemini as solver/judge and Vertex Claude Sonnet as the improver. |
 | `configs/codex-bridge.env` | Tracked preset for running the Codex CLI substrate (`--substrate cx`) via `harness2-bridge`. |
 | `.gitignore` | Protects `.env`, `.venv/`, `runs/`, and downloaded third-party checkouts under `dependencies/` while keeping configs and docs tracked in Git. |
 | `dependencies/opencode/` & `dependencies/harvey-labs/` | Installed and patched OpenCode runtime (with Bun `1.3.11`) and the **LAB** legal benchmark (`1,143` tasks across 10 legal domains). |
+| `harness2/benchmarks/lab.py` & `harness2/cli/bridge.py` | Enhanced so `HARNESS2_JUDGE_BASE_URL` works for both LAB and JobBench judges as well as `harness2-bridge` with local OpenAI-compatible servers. |
 | `harness2/cli/setup.py` | Enhanced with an automatic `bun` postinstall check so `npm v12+` script blocking does not break `harness2-setup`. |
 
 ---
@@ -103,12 +106,35 @@ Harness² validates model strings strictly before starting any run:
 3. **WorkBuddy-Bench restriction**:
    - WorkBuddy requires `HARNESS2_SOLVER_MODEL` to start with `google-vertex/gemini` and `HARNESS2_JUDGE_MODEL` to start with `gemini`. If you change either model in `.env`, re-run `harness2-setup wb` so `configs/models/harness2/{solver,judge}.yaml` is regenerated.
 
-### 3.3 Using Preset Configurations (`configs/`)
+### 3.3 Using Preset Configurations (`configs/`) and Local Inference (`192.168.9.33`)
 
-Three ready-to-use configuration presets are stored in [`configs/`](configs/):
+Your workspace is **already pre-configured in `.env` to use your local inference server at `http://192.168.9.33:8080/v1`** serving `huihui-qwen3.8-flash-next-iq3_s` (131k context window).
+
+#### How Local Inference (`192.168.9.33:8080`) Works
+1. **OpenCode Provider (`configs/opencode-local.json` & `~/.config/opencode/opencode.json`)**:
+   Registers a custom provider named `local` using `@ai-sdk/openai-compatible` pointing to `http://192.168.9.33:8080/v1`, with tool-calling and `reasoning_content` interleaved thinking enabled for `huihui-qwen3.8-flash-next-iq3_s`.
+2. **Environment Settings (`configs/local-inference.env` / `.env`)**:
+   ```env
+   OPENCODE_CONFIG=/home/meldude/harness2/configs/opencode-local.json
+   HARNESS2_SOLVER_MODEL=local/huihui-qwen3.8-flash-next-iq3_s
+   HARNESS2_IMPROVER_MODEL=local/huihui-qwen3.8-flash-next-iq3_s
+   HARNESS2_JUDGE_MODEL=huihui-qwen3.8-flash-next-iq3_s
+   HARNESS2_JUDGE_BASE_URL=http://192.168.9.33:8080/v1
+   HARNESS2_JUDGE_API_KEY=local-key
+   HARNESS2_RUNS_DIR=runs/local-qwen
+   ```
+3. **Adding or Changing Local Models**:
+   If you load a different model on `192.168.9.33:8080`, add its model ID under `provider.local.models` in [`configs/opencode-local.json`](configs/opencode-local.json) (and copy it to `~/.config/opencode/opencode.json`), then update `HARNESS2_SOLVER_MODEL`, `HARNESS2_IMPROVER_MODEL`, and `HARNESS2_JUDGE_MODEL` in `.env`.
+
+#### Switching Between Presets
+Four ready-to-use configuration presets are stored in [`configs/`](configs/):
 
 ```bash
-# Option A: Vertex AI Gemini for Solver, Improver, and Judge (Recommended Default)
+# Option 0: Local Inference Server at 192.168.9.33:8080 (Active by default)
+cp configs/local-inference.env .env
+mkdir -p ~/.config/opencode && cp configs/opencode-local.json ~/.config/opencode/opencode.json
+
+# Option A: Vertex AI Gemini for Solver, Improver, and Judge
 cp configs/vertex-gemini.env .env
 
 # Option B: Vertex Gemini Solver + Vertex Claude Sonnet Improver
@@ -117,8 +143,6 @@ cp configs/vertex-claude-improver.env .env
 # Option C: Codex Substrate via Local LiteLLM Bridge
 cp configs/codex-bridge.env .env
 ```
-
-After copying a preset to `.env`, edit `GOOGLE_CLOUD_PROJECT` in `.env` to match your GCP project ID.
 
 ### 3.4 Authentication Setup
 

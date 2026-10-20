@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local Inference (192.168.9.33)",
+      "options": {
+        "baseURL": "http://192.168.9.33:8080/v1",
+        "apiKey": "local-key"
+      },
+      "models": {
+        "huihui-qwen3.8-flash-next-iq3_s": {
+          "name": "huihui-qwen3.8-flash-next-iq3_s",
+          "tool_call": true,
+          "reasoning": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "limit": {
+            "context": 131072,
+            "output": 32768
+          }
+        }
+      }
+    }
+  }
+}

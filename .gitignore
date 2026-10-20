@@ -1,0 +1,30 @@
+# Python virtual environments & packaging
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Local secrets & active environment file (keep .env.example and configs/*.env tracked)
+.env
+.env.local
+
+# Downloaded third-party benchmark checkouts, datasets, and runtimes
+# (Keep tracked metadata in dependencies/)
+dependencies/*
+!dependencies/README.md
+!dependencies/PINNED.md
+!dependencies/ASSETS.json
+
+# Experiment outputs, rollouts, and logs
+runs/
+*.log
+
+# IDE / OS files
+.DS_Store
+.vscode/
+.idea/

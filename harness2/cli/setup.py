@@ -56,6 +56,9 @@ def main(argv=None):
         install.run(
             ["npm", "install", "--prefix", config.DEPENDENCIES / "tools", "bun@1.3.11"], dry_run=dry
         )
+        bun_postinstall = config.DEPENDENCIES / "tools" / "node_modules" / "bun" / "install.js"
+        if not dry and bun_postinstall.is_file() and config.BUN.resolve().suffix == ".exe":
+            install.run(["node", bun_postinstall])
         install.run(
             [config.BUN, "install", "--frozen-lockfile", "--ignore-scripts"],
             cwd=config.OPENCODE_DIR,

@@ -159,9 +159,11 @@ class Proposer:
                 if context_dir and Path(context_dir).is_dir():
                     shutil.copytree(context_dir, tmp / "context", dirs_exist_ok=True)
                 with _SEM if _SEM is not None else contextlib.nullcontext():
-                    text, cost, err = (
-                        self._claude_cli if self.spec.kind == "claude_cli" else self._opencode
-                    )(tmp, mission, system, wall)
+                    runner = {
+                        "claude_cli": self._claude_cli,
+                        "agy_cli": self._agy_cli,
+                    }.get(self.spec.kind, self._opencode)
+                    text, cost, err = runner(tmp, mission, system, wall)
                 spent_usd += cost
                 if not text.strip():
                     last = err or "empty reply"
@@ -247,6 +249,50 @@ class Proposer:
             err = f"CLI error: {payload.get('subtype')} {str(text)[:200]}"
             text = ""
         elif p.returncode != 0 and not text.strip():
+            err = f"rc={p.returncode}: {(p.stderr or '')[-300:]}"
+        return text, float(payload.get("total_cost_usd") or 0.0), err
+
+    def _agy_cli(
+        self, cwd: Path, mission: str, system: str, wall: int
+    ) -> tuple[str, float, str]:
+        (cwd / "MISSION.md").write_text(
+            (f"{system}\n\n---\n\n" if system else "") + mission, encoding="utf-8"
+        )
+        out = cwd / "output"
+        out.mkdir(exist_ok=True)
+        prompt = (
+            "Read MISSION.md first. Do what it asks. Reply with the requested output as "
+            "your final message AND save it verbatim to output/answer.md."
+        )
+        cli = shutil.which("agy") or str(Path.home() / ".local" / "bin" / "agy")
+        cmd = [
+            cli,
+            "--dangerously-skip-permissions",
+            "-p",
+            prompt,
+            "--output-format",
+            "json",
+            "--effort",
+            self.spec.effort,
+        ]
+        if self.spec.model and not self.spec.model.startswith("agy/"):
+            cmd += ["--model", self.spec.model]
+        p = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=self.env(),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=wall,
+        )
+        ans = out / "answer.md"
+        file_ans = ans.read_text(encoding="utf-8") if ans.is_file() else ""
+        payload = _parse_json(p.stdout)
+        stream_text = str(payload.get("result") or payload.get("text") or p.stdout or "")
+        text = file_ans if len(file_ans.strip()) >= len(stream_text.strip()) else stream_text
+        err = ""
+        if p.returncode != 0 and not text.strip():
             err = f"rc={p.returncode}: {(p.stderr or '')[-300:]}"
         return text, float(payload.get("total_cost_usd") or 0.0), err
 
